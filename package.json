@@ -1,0 +1,20 @@
+{
+  "name": "layout",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "format": "npx prettier --write ."
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "csv-load-sync": "^1.0.0",
+    "potpack": "^1.0.1",
+    "prettier": "^2.2.0",
+    "stock-cutting": "^1.2.0",
+    "svg.js": "^2.7.1",
+    "svgdom": "^0.1.8"
+  }
+}
