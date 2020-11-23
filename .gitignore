@@ -1,6 +1,6 @@
 node_modules
-bazel-bin
-bazel-out
-bazel-packingsolver
+vendor/packingsolver/bazel-bin
+vendor/packingsolver/bazel-out
+vendor/packingsolver/bazel-packingsolver
 bazel-testlogs
 out.svg

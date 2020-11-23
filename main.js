@@ -4,8 +4,13 @@ const SVG = require("svg.js")(window);
 const document = window.document;
 const csv = require("csv-load-sync");
 const fs = require("fs");
+const os = require("os");
+const path = require("path");
 const util = require("util");
+const process = require("process");
 const exec = util.promisify(require("child_process").exec);
+const commandLineArgs = require("command-line-args");
+require("colors");
 
 // SVG files use 96 points per inch
 function inch(n) {
@@ -17,77 +22,55 @@ function ainch(n) {
   return (n / 1000) * 96;
 }
 
-
-function drawBoard(canvas, x, y, height, width, margin, rough_padding, label) {
+// Label a board in the output
+function labelBoard(canvas, x, y, height, width, label) {
   const group = canvas.group();
-  let background = "white";
-  if (label.indexOf("Stock") !== -1) {
-    background = "#eee";
-    rough_padding = 0;
-    margin = 2 * margin;
-  }
 
-  // label = label.replace(/ /g, '\n');
+  // For narrow boards, we lay the label out one after another
+  // TODO(jimmy): Check if label will fit and abbreviate if not.
   if (width > 3) {
     label = label + `\n${height} x ${width}"`;
   } else {
     label = label + ` - ${height} x ${width}"`;
   }
 
-  //group.rect(inch(width - (2 * margin)), inch(height - (2 * margin))).fill(background).stroke({ width: 1, color: '#000'}).move(inch(x + margin), inch(y + margin));
-
-  // group.rect(inch(width), inch(height)).fill(background).stroke({ width: 1, color: '#000'}).move(inch(x), inch(y));
-
-  // if (rough_padding) {
-  // group.rect(inch(width - (2 * margin)), inch(height - (2 * margin))).fill(background).stroke({ width: 1, color: '#000', dasharray: '5,5' }).move(inch(x + margin), inch(y + margin));
-  // }
-
-  // TEMP: Disable because it's far too small to see
-  // group.rect(inch(width - (2 * margin) - (2 * rough_padding)), inch(height - (2 * margin) - (2 * rough_padding))).fill(background).stroke({ width: 1, color: '#000', dasharray: '15,15' }).move(inch(x + margin + rough_padding), inch(y + margin + rough_padding));
   centeredText(group, label, 15, width / 2 + x, height / 2 + y, true);
 }
 
-function drawStock(canvas, x, y, height, width, margin) {
-  const group = canvas.group();
-  let background = "#eee";
-
-  group
+// Draw the outline of a piece of stock
+function drawStock(canvas, x, y, height, width) {
+  canvas
     .rect(inch(width), inch(height))
-    .fill(background)
+    .fill("#eee")
     .stroke({ width: 1, color: "#ff0" })
     .move(inch(x), inch(y));
-  // group.rect(inch(width - (2 * margin)), inch(height - (2 * margin))).fill(background).stroke({ width: 1, color: '#000', dasharray: '15,15' }).move(inch(x + margin), inch(y + margin));
 }
 
-function drawOffcut(canvas, x, y, height, width) {
-  const group = canvas.group();
-  let background = "#f00";
-
-  group
+function drawWaste(canvas, x, y, height, width) {
+  canvas
     .rect(inch(width), inch(height))
     .fill("#f00")
     .stroke({ width: 0, color: "#000" })
     .move(inch(x), inch(y));
 }
 
-function ddo(canvas, x, y, height, width) {
+// Draw the cuts that need to be made to produce the output boards.
+// The output from packingsolver is a tree describing the board you're left with
+// after each cut.
+//
+// Each ndoe in the tree will share two or more edges with its parent since only
+// one cut (horizontal or vertical) is made at each level in the tree.
+//
+// To avoid drawing over the top of each edge multiple times, we identify
+// edges that are shared with the parent and avoid drawing them.
+function drawCuts(canvas, box, parent, ox, oy) {
   const group = canvas.group();
-  let background = "#f00";
 
-  group
-    .rect(inch(width), inch(height))
-    .fill("#fff")
-    .stroke({ width: 0, color: "#000" })
-    .move(inch(x), inch(y));
-}
-
-function drawOffcut2(canvas, box, parent, ox, oy) {
-  const group = canvas.group();
+  // Offsets are in inches, but board and canvas dimensions are in 1000xinch
   ox = ox * 1000;
   oy = oy * 1000;
 
-  // console.log(`Comparing ${box.X} to ${parent.X}`);
-  // TODO(add stock offsets)
+  // Left vertical cut
   if (box.X !== parent.X) {
     group
       .line(
@@ -99,7 +82,7 @@ function drawOffcut2(canvas, box, parent, ox, oy) {
       .stroke({ width: 1, color: "#f0f" });
   }
 
-  // console.log(`Comparing ${box.Y} to ${parent.Y}`);
+  // Top horizontal cut
   if (box.Y !== parent.Y) {
     group
       .line(
@@ -111,7 +94,7 @@ function drawOffcut2(canvas, box, parent, ox, oy) {
       .stroke({ width: 1, color: "#f0f" });
   }
 
-  // console.log(`Comparing ${box.Y + box.HEIGHT} to ${parent.Y + box.HEIGHT}`);
+  // Right vertical cut
   if (box.Y + box.HEIGHT !== parent.Y + parent.HEIGHT) {
     group
       .line(
@@ -123,7 +106,7 @@ function drawOffcut2(canvas, box, parent, ox, oy) {
       .stroke({ width: 1, color: "#f0f" });
   }
 
-  // console.log(`Comparing ${box.X + box.WIDTH} to ${parent.X + parent.WIDTH}`);
+  // Bottom horizontal cut
   if (box.X + box.WIDTH !== parent.X + parent.WIDTH) {
     group
       .line(
@@ -134,69 +117,6 @@ function drawOffcut2(canvas, box, parent, ox, oy) {
       )
       .stroke({ width: 1, color: "#f0f" });
   }
-
-  // const group = canvas.group()
-  // let background = '#f00';
-  // group.rect(inch(width), inch(height)).fill('#fff').stroke({ width: 1, color: '#000'}).move(inch(x), inch(y));
-}
-
-function drawBoard2(canvas, box, parent, ox, oy) {
-  const group = canvas.group();
-  ox = ox * 1000;
-  oy = oy * 1000;
-
-  console.log(`Comparing ${box.X} to ${parent.X}`);
-  // TODO(add stock offsets)
-  if (box.X !== parent.X) {
-    group
-      .line(
-        ainch(box.X + ox),
-        ainch(box.Y + oy),
-        ainch(box.X + ox),
-        ainch(box.Y + box.HEIGHT + oy)
-      )
-      .stroke({ width: 1, color: "#000" });
-  }
-
-  console.log(`Comparing ${box.Y} to ${parent.Y}`);
-  if (box.Y !== parent.Y) {
-    group
-      .line(
-        ainch(box.X + ox),
-        ainch(box.Y + oy),
-        ainch(box.X + box.WIDTH + ox),
-        ainch(box.Y + oy)
-      )
-      .stroke({ width: 1, color: "#000" });
-  }
-
-  console.log(`Comparing ${box.Y + box.HEIGHT} to ${parent.Y + box.HEIGHT}`);
-  if (box.Y + box.HEIGHT !== parent.Y + parent.HEIGHT) {
-    group
-      .line(
-        ainch(box.X + ox),
-        ainch(box.Y + box.HEIGHT + oy),
-        ainch(box.X + box.WIDTH + ox),
-        ainch(box.Y + box.HEIGHT + oy)
-      )
-      .stroke({ width: 1, color: "#000" });
-  }
-
-  console.log(`Comparing ${box.X + box.WIDTH} to ${parent.X + parent.WIDTH}`);
-  if (box.X + box.WIDTH !== parent.X + parent.WIDTH) {
-    group
-      .line(
-        ainch(box.X + box.WIDTH + ox),
-        ainch(box.Y + oy),
-        ainch(box.X + box.WIDTH + ox),
-        ainch(box.Y + box.HEIGHT + oy)
-      )
-      .stroke({ width: 1, color: "#000" });
-  }
-
-  // const group = canvas.group()
-  // let background = '#f00';
-  // group.rect(inch(width), inch(height)).fill('#fff').stroke({ width: 1, color: '#000'}).move(inch(x), inch(y));
 }
 
 function centeredText(canvas, text, size, x, y, rotate) {
@@ -209,53 +129,87 @@ function centeredText(canvas, text, size, x, y, rotate) {
   }
 }
 
-function isReferenced(boxes, node_id) {
+function hasChildren(boxes, node_id) {
   for (const box of boxes) {
     if (box.PARENT === node_id) return true;
   }
   return false;
 }
 
+const optionDefinitions = [
+  { name: "input", type: String, defaultOption: true },
+  { name: "kerf", type: Boolean },
+  { name: "groupMultipleBoards", type: Boolean },
+  { name: "stockWaste", type: Number },
+  { name: "boardWaste", type: Number },
+  { name: "output", type: String },
+];
+
 (async function run() {
-  const KERF = 0.125 / 2;
-  const ROUGH_PADDING = 0.125;
+  const options = commandLineArgs(optionDefinitions);
 
-  // Amount of the board lost when jointing and cutting down
-  const BOARD_WASTE = 0.125;
+  if (!options.input) {
+    console.log(
+      "You must provide a path to the input folder containing boards.csv and stock.csv e.g. cutlayout path/to/foo"
+        .red
+    );
+    return;
+  }
 
-  const data = csv("boards.csv");
-  const stock = csv("stock.csv");
-  const boxes = [];
+  var config = {};
+  if (fs.existsSync(path.join(options.input, "config.json"))) {
+    config = JSON.parse(
+      fs.readFileSync(path.join(options.input, "config.json"))
+    );
+  }
 
-  const items = [];
+  const KERF = (config.kerf || options.kerf || 0.125) / 2;
+  const BOARD_WASTE = config.boardWaste || options.boardWaste || 0.125;
+  const STOCK_WASTE = config.stockWaste || options.stockWaste || 0.125;
+  const GROUP_BOARDS =
+    config.groupMultipleBoards || options.groupMultipleBoards;
 
+  // Spacing between boards, in inches
+  const STOCK_SPACING = 3;
+  const boards = csv(path.join(options.input, "boards.csv"));
+  const stock = csv(path.join(options.input, "stock.csv"));
+
+  // Parse stock inputs and add padding as needed.
   let currentX = 0;
-  let stockMargin = 3;
   for (const row of stock) {
     row.top_margin = parseFloat(row.top_margin);
     row.bottom_margin = parseFloat(row.bottom_margin);
-    row.w = parseFloat(row.width) - 2 * BOARD_WASTE;
+    row.w = parseFloat(row.width) - 2 * STOCK_WASTE;
     row.h =
       parseFloat(row.height) -
-      2 * BOARD_WASTE -
+      2 * STOCK_WASTE -
       row.top_margin -
       row.bottom_margin;
-    row.x = currentX + stockMargin;
-    currentX += stockMargin + row.w;
-    row.y = stockMargin;
+    row.x = currentX + STOCK_SPACING;
+    currentX += STOCK_SPACING + row.w;
+    row.y = STOCK_SPACING;
   }
 
-  for (const row of data) {
+  // Parse required boards
+  for (const row of boards) {
     row.quantity = parseInt(row.quantity, 10);
-    row.w = parseFloat(row.width) + 2 * KERF + 2 * ROUGH_PADDING;
+    row.w = parseFloat(row.width) + 2 * KERF + 2 * BOARD_WASTE;
 
-    // Multiple copies of one board will always be layed out together.
-    row.h =
-      (parseFloat(row.height) + 2 * KERF + 2 * ROUGH_PADDING) * row.quantity;
-    items.push(row);
+    if (GROUP_BOARDS) {
+      // Multiple copies of one board will always be layed out together.
+      row.h =
+        (parseFloat(row.height) + 2 * KERF + 2 * BOARD_WASTE) * row.quantity;
+      row.adjustedQuantity = 1;
+    } else {
+      row.h = parseFloat(row.height) + 2 * KERF + 2 * BOARD_WASTE;
+      row.adjustedQuantity = row.quantity;
+    }
   }
 
-  // Write stock and items files
+  // Make a temporary directory to write intermediate files to
+  const tempPath = fs.mkdtempSync(`${os.tmpdir()}${path.sep}`);
+
+  // Write stock and items files in the format required for `packingsolver`
   const stockData = [["ID", "WIDTH", "HEIGHT"]];
   for (let i = 0; i < stock.length; ++i) {
     stockData.push([
@@ -264,38 +218,49 @@ function isReferenced(boxes, node_id) {
       Math.floor(stock[i].h * 1000),
     ]);
   }
-  fs.writeFileSync("/Users/jimmy/TEST_bins.csv", stockData.join("\n"));
+  fs.writeFileSync(path.join(tempPath, "TEST_bins.csv"), stockData.join("\n"));
 
   const itemsData = [["ID", "WIDTH", "HEIGHT", "COPIES"]];
-  for (let i = 0; i < items.length; ++i) {
-    // We've already doubled the height of duplicated boards (to place them near eachother).
-    // So we reduce quantity to one here.
+  for (let i = 0; i < boards.length; ++i) {
     itemsData.push(
-      [i, Math.floor(items[i].w * 1000), Math.floor(items[i].h * 1000), 1].join(
-        ","
-      )
+      [
+        boards[i].adjustedQuantity,
+        Math.floor(boards[i].w * 1000),
+        Math.floor(boards[i].h * 1000),
+        1,
+      ].join(",")
     );
   }
-  fs.writeFileSync("/Users/jimmy/TEST_items.csv", itemsData.join("\n"));
+  fs.writeFileSync(path.join(tempPath, "TEST_items.csv"), itemsData.join("\n"));
 
-  // TODO(jimmy): Move the executable into this directory
+  const packingsolverBinary = path.join(
+    __dirname,
+    "vendor/packingsolver/bazel-bin/packingsolver/main"
+  );
+  if (!fs.existsSync(packingsolverBinary)) {
+    console.log(
+      "You must build packingsolver with Bazel before running this program.".red
+    );
+    return;
+  }
+
   const {
     stdout,
     stderr,
   } = await exec(
-    '/Users/jimmy/src/packingsolver/bazel-bin/packingsolver/main -v -p RG -i /Users/jimmy/TEST -c /Users/jimmy/TEST_solution.csv -o /Users/jimmy/TEST_output.json -t 4 -q "RG -p 3NHO" -a "IMBA* -c 4"  -q "RG -p 3NHO" -a "IMBA* -c 5"',
+    `${packingsolverBinary} -v -p RG -i ${tempPath}/TEST -c ${tempPath}/TEST_solution.csv -o ${tempPath}/TEST_output.json -t 4 -q "RG -p 3NHO" -a "IMBA* -c 4"  -q "RG -p 3NHO" -a "IMBA* -c 5"`,
     { shell: true }
   );
 
   // create svg.js instance
   const canvas = SVG(document.documentElement).size(inch(50), inch(200));
 
-  // Draw our stock
+  // Draw each piece of stock
   for (const board of stock) {
-    const h = board.h + board.top_margin + board.bottom_margin; // + (2 * BOARD_WASTE);
-    const w = board.w; // + (2 * BOARD_WASTE);
+    const h = board.h + board.top_margin + board.bottom_margin;
+    const w = board.w;
 
-    drawStock(canvas, board.x, board.y, h, w, KERF);
+    drawStock(canvas, board.x, board.y, h, w);
     if (board.top_margin > 0) {
       centeredText(
         canvas,
@@ -319,8 +284,7 @@ function isReferenced(boxes, node_id) {
     centeredText(canvas, label, 30, board.x + w / 2, board.y + h + 1.5);
   }
 
-  const solution = csv("/Users/jimmy/TEST_solution.csv");
-  // Fix up types
+  const solution = csv(path.join(tempPath, "TEST_solution.csv"));
   for (const box of solution) {
     box.X = parseInt(box.X, 10);
     box.Y = parseInt(box.Y, 10);
@@ -328,12 +292,19 @@ function isReferenced(boxes, node_id) {
     box.WIDTH = parseInt(box.WIDTH, 10);
   }
 
+  // Render each cut and label each output board in the solution.
   for (const box of solution) {
-    const originalBoard = items[box.TYPE];
-    const parentStock = stock[box.PLATE_ID];
-    const x = box.X / 1000 + parentStock.x; // + BOARD_WASTE;
-    const y = box.Y / 1000 + parentStock.y; // + BOARD_WASTE //  + parentStock.top_margin;
+    // Map boards in the output to the original set of input boards to retrieve their name.
+    const originalBoard = boards[box.TYPE];
 
+    // Determine which sheet of stock this board will be cut from.
+    const parentStock = stock[box.PLATE_ID];
+
+    const x = box.X / 1000 + parentStock.x;
+    const y = box.Y / 1000 + parentStock.y + parentStock.top_margin;
+
+    // Boards are output as a tree - find the immediate parent of this node. If no parent,
+    // treat the stock as the parent.
     var parent;
     if (!box.PARENT) {
       parent = {
@@ -346,49 +317,37 @@ function isReferenced(boxes, node_id) {
       parent = solution[box.PARENT];
     }
 
+    // Does this map to a board in our input file? If so, label it.
     if (originalBoard) {
       originalBoard.placed = true;
 
-      // drawBoard(canvas, x, y, box.HEIGHT / 1000, box.WIDTH / 1000, MARGIN, ROUGH_PADDING, originalBoard.title);
-
-      if (originalBoard.quantity === 1) {
-        // board(canvas, box.x, box.y, box.h, box.w, MARGIN, ROUGH_PADDING, box.title);
-        drawBoard(
+      if (originalBoard.quantity === 1 || !GROUP_BOARDS) {
+        labelBoard(
           canvas,
           x,
           y,
           box.HEIGHT / 1000,
           box.WIDTH / 1000,
-          KERF,
-          ROUGH_PADDING,
           originalBoard.title
         );
-        // drawBoard(canvas, x, y, box.HEIGHT / 1000, box.WIDTH / 1000, KERF, ROUGH_PADDING, box.NODE_ID);
       } else {
+        // If we did group boards, we need to divide the output board up into N parts.
         const group = canvas.group();
         const partialHeight = box.HEIGHT / 1000 / originalBoard.quantity;
-        for (var i = 0; i < originalBoard.quantity; ++i) {
+        for (let i = 0; i < originalBoard.quantity; ++i) {
           const title = `${originalBoard.title} #${i}`;
-          drawBoard(
+          labelBoard(
             group,
             x,
             y + i * partialHeight,
             partialHeight,
             box.WIDTH / 1000,
-            KERF,
-            ROUGH_PADDING,
             title
           );
         }
 
-        // Draw a line at each point
+        // Draw a line at each point to divide the sections of the board.
         for (var i = 0; i < originalBoard.quantity; ++i) {
-          console.log(
-            "**** DRAWING LINE AT",
-            y + i * partialHeight,
-            x,
-            x + box.WIDTH / 1000
-          );
           group
             .line(
               inch(x),
@@ -397,31 +356,29 @@ function isReferenced(boxes, node_id) {
               inch(y + i * partialHeight)
             )
             .stroke({ width: 1, color: "#000" });
-          // const title = `${originalBoard.title} #${i}`;
-          //drawBoard(group, x, y + (i * partialHeight), partialHeight, box.WIDTH / 1000, KERF, ROUGH_PADDING, title);
         }
       }
-      // drawBoard2(canvas, box, parent, parentStock.x, parentStock.y);
-      // drawOffcut(canvas, x, y, box.HEIGHT / 1000, box.WIDTH / 1000);
     } else {
-      //drawOffcut(canvas, x, y, box.HEIGHT / 1000, box.WIDTH / 1000);
-      //if (box.NODE_ID === '2') {
-      drawOffcut2(canvas, box, parent, parentStock.x, parentStock.y);
-      //ddo(canvas, x, y, box.HEIGHT / 1000, box.WIDTH / 1000);
-      //}
-      if (!isReferenced(solution, box.NODE_ID)) {
-        drawOffcut(canvas, x, y, box.HEIGHT / 1000, box.WIDTH / 1000);
-        // drawOffcut(canvas, x, y, box.HEIGHT / 1000, box.WIDTH / 1000, KERF, ROUGH_PADDING, 'X' + box.NODE_ID);
+      drawCuts(canvas, box, parent, parentStock.x, parentStock.y);
+
+      // If this node has no children and no label, it is waste. Mark it as such.
+      if (!hasChildren(solution, box.NODE_ID)) {
+        drawWaste(canvas, x, y, box.HEIGHT / 1000, box.WIDTH / 1000);
       }
-      //drawBoard(canvas, x, y, box.HEIGHT / 1000, box.WIDTH / 1000, KERF, ROUGH_PADDING, 'X' + box.NODE_ID);
     }
   }
 
-  for (let i = 0; i < items.length; ++i) {
-    if (!items[i].placed) {
-      console.log(`Failed to place board ${i}: ${items[i].title}`);
+  // Verify that all boards were placed.
+  for (let i = 0; i < boards.length; ++i) {
+    if (!boards[i].placed) {
+      console.log(`Failed to place board ${i}: ${boards[i].title}`.red);
     }
   }
 
-  fs.writeFileSync("out.svg", canvas.svg());
+  if (options.output) {
+    const outputPath = path.resolve(__dirname, options.output);
+    fs.writeFileSync(outputPath, canvas.svg());
+  } else {
+    console.log(canvas.svg());
+  }
 })();

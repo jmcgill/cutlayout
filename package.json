@@ -10,11 +10,16 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "colors": "^1.4.0",
+    "command-line-args": "^5.1.1",
     "csv-load-sync": "^1.0.0",
     "potpack": "^1.0.1",
     "prettier": "^2.2.0",
     "stock-cutting": "^1.2.0",
     "svg.js": "^2.7.1",
     "svgdom": "^0.1.8"
+  },
+  "devDependencies": {
+    "eslint": "^7.14.0"
   }
 }

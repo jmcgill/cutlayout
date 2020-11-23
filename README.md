@@ -4,6 +4,7 @@ A simple cutlist optimizer with configurable options designed for working with r
 which can be further edited if required.
 
 ## Installing
+
 Begin by installing local nodejs dependencies.
 
 ```
@@ -19,14 +20,15 @@ Before running `cutlayout` the solver must be built locally.
 brew install bazel
 cd vendor/packingsolver
 bazel build -- //...
-``` 
+```
 
 ## Running
+
 `cutlayout` expects a directory containing three files:
 
-* stock.csv - The raw stock we're cutting up
-* boards.csv - The output boards we want to produce
-* config.json - Configuration
+- stock.csv - The raw stock we're cutting up
+- boards.csv - The output boards we want to produce
+- config.json - Configuration
 
 and is invoked as:
 
@@ -35,6 +37,7 @@ and is invoked as:
 Each option in `config.json` can be overwritten with a command line flag with the same name.
 
 ### stock.csv
+
 This file contains the raw stock to cut up. It allows information about end-defects to be included; this is just a bit
 easier than trying to remember if you did or did not subtract a particular end.
 
@@ -48,6 +51,7 @@ width,  height, title, top_defect, bottom_defect
 ```
 
 ### boards.csv
+
 This file contains the boards we're trying to produce as output.
 
 ```
@@ -58,6 +62,7 @@ quantity, width, height, title
 ```
 
 ### options.json
+
 Configurable options. While these options can all be specified via the command line, it is recommended to store them
 in options.json so that you can reproduce the exact layout if needed.
 
@@ -77,4 +82,4 @@ board similarity at the expense of yield.
     stockWaste: 0.25,
     boardWaste: 0.25
 }
-``` 
+```
