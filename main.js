@@ -262,6 +262,11 @@ const optionDefinitions = [
 
     drawStock(canvas, board.x, board.y, h, w);
     if (board.top_margin > 0) {
+      canvas
+        .rect(inch(w), inch(board.top_margin))
+        .fill("#f00")
+        .stroke({ width: 0, color: "#000" })
+        .move(inch(board.x), inch(board.y));
       centeredText(
         canvas,
         "" + board.top_margin + '"',
@@ -271,6 +276,11 @@ const optionDefinitions = [
       );
     }
     if (board.bottom_margin > 0) {
+      canvas
+        .rect(inch(w), inch(board.bottom_margin))
+        .fill("#f00")
+        .stroke({ width: 0, color: "#000" })
+        .move(inch(board.x), inch(board.y + h - board.bottom_margin));
       centeredText(
         canvas,
         "" + board.bottom_margin + '"',
