@@ -1,6 +1,6 @@
 {
   "kerf": 0.125,
-  "groupMultipleBoards": false,
+  "groupMultipleBoards": true,
   "boardWaste": 0.125,
   "stockWaste": 0.125
 }

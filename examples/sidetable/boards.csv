@@ -1,0 +1,11 @@
+quantity, width, height, title
+1, 1.25, 30.5, "Long Rail #1"
+1, 1.25, 30.5, "Long Rail #2"
+1, 1.25, 5, "Short Rail #1"
+1, 1.25, 5, "Short Rail #2"
+1, 2.5, 5, "Lifted Rail #1"
+1, 2.5, 5, "Lifted Rail #2"
+1, 0.5, 37, "Edging #1"
+1, 0.5, 37, "Edging #2"
+1, 0.5, 37, "Edging #3"
+1, 0.5, 37, "Edging #4"
